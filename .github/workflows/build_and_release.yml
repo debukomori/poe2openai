@@ -1,118 +1,24 @@
-# 文件名: .github/workflows/build_and_release.yml
+name: Build Linux Binary
 
-name: Rust Build and Release
-
-# 控制工作流的觸發條件
 on:
   push:
-    branches: [ "main", "master" ] # 當推送到 main 或 master 分支時觸發
-  pull_request:
-    branches: [ "main", "master" ] # 當有 PR 指向 main 或 master 分支時觸發
-  release:
-    types: [created] # 當在 GitHub 上創建新版本時觸發
-
-# 為工作流設置環境變量
-env:
-  CARGO_TERM_COLOR: always
-  # 執行檔的基礎名稱
-  BINARY_NAME: poe2openai
+    branches: [ "main" ]  # 触发条件：推送到 main 分支时运行
 
 jobs:
-  # 第一個任務：構建和測試
   build:
-    name: Build on ${{ matrix.os }}
-    # 在多個操作系統上運行
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        # 定義操作系統矩陣
-        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ubuntu-latest  # 使用 Linux 环境，确保编译出 Linux 二进制
 
     steps:
-      # 步驟 1：拉取程式碼
-      - name: Checkout repository
-        uses: actions/checkout@v4
+    - uses: actions/checkout@v4  # 检出代码
 
-      # 步驟 2：安裝 Rust 工具鏈 (使用 dtolnay/rust-toolchain action)
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable  # 安装稳定版 Rust 工具链
 
-      # 步驟 3：緩存 Cargo 依賴項，加速構建
-      - name: Cache Cargo dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+    - name: Build Release
+      run: cargo build --release  # 编译 Release 版本
 
-      # 步驟 4：運行 Clippy 進行代碼風格和質量檢查 (可選但推薦)
-      - name: Run Clippy
-        run: cargo clippy -- -D warnings
-
-      # 步驟 5：運行測試
-      - name: Run tests
-        run: cargo test --verbose
-
-      # 步驟 6：構建 Release 版本的可執行文件
-      - name: Build release binary
-        run: cargo build --release --verbose
-
-      # 步驟 7：準備上傳的產物 (Artifacts)
-      - name: Prepare artifact for upload
-        # 根據不同操作系統處理文件名
-        run: |
-          # 確定源文件路徑和目標文件名
-          src_path="./target/release/${{ env.BINARY_NAME }}"
-          dest_name="${{ env.BINARY_NAME }}-${{ matrix.os }}"
-          
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            src_path="${src_path}.exe"
-            dest_name="${dest_name}.exe"
-          fi
-          
-          # 將可執行文件複製並重命名，以便在 Release 中區分
-          cp "${src_path}" "${dest_name}"
-        shell: bash
-
-      # 步驟 8：上傳構建產物，供後續 release 任務使用
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.BINARY_NAME }}-${{ matrix.os }}
-          path: ${{ env.BINARY_NAME }}-${{ matrix.os }}* # 上傳重命名後的文件
-
-  # 第二個任務：創建 GitHub Release
-  create-release:
-    name: Create Release
-    # 只有在創建新標籤 (tag) 時才運行此任務
-    if: startsWith(github.ref, 'refs/tags/')
-    # 依賴於 build 任務成功完成
-    needs: build
-    runs-on: ubuntu-latest
-    
-    permissions:
-      contents: write # 需要寫入權限來創建 Release
-
-    steps:
-      # 步驟 1：拉取程式碼 (獲取 tag 信息)
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      # 步驟 2：下載所有平台構建的產物
-      - name: Download all build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts/ # 將所有產物下載到 artifacts/ 目錄下
-
-      # 步驟 3：創建 Release 並上傳所有可執行文件
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          # files 字段會自動查找並上傳所有平台的可執行文件
-          files: |
-            artifacts/**/*
-
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4  # 上传编译结果作为 artifact，便于下载
+      with:
+        name: poe2openai-linux
+        path: target/release/poe2openai  # 只上传二进制文件
